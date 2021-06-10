@@ -7,8 +7,6 @@
 
         <!-- Babylon.js -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
-        <script src="https://preview.babylonjs.com/ammo.js"></script>
-        <script src="https://preview.babylonjs.com/cannon.js"></script>
         <script src="https://preview.babylonjs.com/Oimo.js"></script>
         <script src="https://preview.babylonjs.com/earcut.min.js"></script>
         <script src="https://preview.babylonjs.com/babylon.js"></script>
@@ -47,29 +45,64 @@
         var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
         class Playground {
             static CreateScene(engine, canvas) {
+                const State = Object.freeze({
+                    INACTIVE: 1,
+                    CHARGING: 2,
+                });
                 // This creates a basic Babylon Scene object (non-mesh)
-                var scene = new BABYLON.Scene(engine);
+                const scene = new BABYLON.Scene(engine);
                 // This creates and positions a free camera (non-mesh)
-                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 2, -0.6), scene);
+                const camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 2, -0.6), scene);
                 // This targets the camera to scene origin
                 camera.setTarget(BABYLON.Vector3.Zero());
                 // This attaches the camera to the canvas
                 camera.attachControl(canvas, true);
                 // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
-                var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+                const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
                 // Default intensity is 1. Let's dim the light a small amount
                 light.intensity = 0.7;
+                const hands = [];
                 BABYLON.WebXRDefaultExperience.CreateAsync(scene).then((xr) => {
                     const handsFeature = xr.baseExperience.featuresManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
-                        xrInput: xr.input
+                        xrInput: xr.input,
+                        jointMeshes: {
+                            disableDefaultHandMesh: true,
+                            sourceMesh: BABYLON.MeshBuilder.CreateCylinder("jointParent", {diameterTop: 0, height: 1})
+                        },
                     });
                     handsFeature.onHandAddedObservable.add((hand) => {
-                        const obs = xr.baseExperience.sessionManager.onXRFrameObservable.add(() => {
-                            if (hand.handMesh) {
-                                // xr.baseExperience.sessionManager.onXRFrameObservable.remove(obs);
-                            }
-                        });
+                        hands.push(hand);
                     });
+                });
+
+                let sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.2, segments: 32 }, scene);
+                let currentState = State.INACTIVE;
+                let chargePosition = null;
+                const isHandsCharging = () => {
+                    if (hands.length === 2) {
+                        const middleFingerMetacarpal1 = hands[0].trackedMeshes[10];
+                        const middleFingerMetacarpal2 = hands[1].trackedMeshes[10];
+                        const positionDiff = middleFingerMetacarpal1.position.subtract(middleFingerMetacarpal2.position);
+                        chargePosition = middleFingerMetacarpal1.add(positionDiff.multiplyByFloats(0.5, 0.5, 0.5));
+                        sphere.position = chargePosition;
+                        return positionDiff.length() < 0.2;
+                    }
+                    return false;
+                };
+                scene.registerBeforeRender(() => {
+                    switch (currentState) {
+                        case State.INACTIVE:
+                            if (isHandsCharging()) {
+                                currentState = State.CHARGING;
+                                sphere.isVisible = true;
+                            }
+                            break;
+                        case State.CHARGING:
+                            if (!isHandsCharging()) {
+                                currentState = State.INACTIVE;
+                                sphere.isVisible = false;
+                            }
+                    }
                 });
                 return scene;
             }
