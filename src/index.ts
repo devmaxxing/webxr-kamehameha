@@ -1,12 +1,14 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { getSceneModuleWithName } from "./createScene";
 
-const getModuleToLoad = (): string | undefined => location.search.split('scene=')[1];
+const getModuleToLoad = (): string | undefined => location.search.split('scene=')[3];
 
 export const babylonInit = async (): Promise<void>  => {
     // get the module to load
     const moduleName = getModuleToLoad();
+    // debugger
     const createSceneModule = await getSceneModuleWithName(moduleName);
+    console.log(createSceneModule)
 
     // Execute the pretasks, if defined
     await Promise.all(createSceneModule.preTasks || []);
