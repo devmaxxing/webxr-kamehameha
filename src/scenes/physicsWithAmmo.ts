@@ -13,6 +13,8 @@ import "@babylonjs/core/Materials/standardMaterial";
 import { PhysicsImpostor } from "@babylonjs/core/Physics/physicsImpostor";
 import { ammoModule, ammoReadyPromise } from "../externals/ammo";
 import { CreateSceneClass } from "../createScene";
+import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
+import { Texture } from "@babylonjs/core";
 
 class PhysicsSceneWithAmmo implements CreateSceneClass {
     preTasks = [ammoReadyPromise];
@@ -49,15 +51,19 @@ class PhysicsSceneWithAmmo implements CreateSceneClass {
     
         // Move the sphere upward 1/2 its height
         sphere.position.y = 5;
-    
+
+        // Particle Effect
+
+        const particleEffect = new ParticleSystem('particles', 5, scene)
+        particleEffect.particleTexture = new Texture("path to texture", scene);
         // Our built-in 'ground' shape.
-        const ground = GroundBuilder.CreateGround(
-            "ground",
-            { width: 6, height: 6 },
-            scene
-        );
+        // const ground = GroundBuilder.CreateGround(
+        //     "ground",
+        //     { width: 6, height: 6 },
+        //     scene
+        // );
         
-        ground.physicsImpostor = new PhysicsImpostor(ground, PhysicsImpostor.BoxImpostor, { mass: 0, restitution: 0.6});
+        // ground.physicsImpostor = new PhysicsImpostor(ground, PhysicsImpostor.BoxImpostor, { mass: 0, restitution: 0.6});
     
         return scene;
     };
