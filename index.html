@@ -47,7 +47,7 @@
             static CreateScene(engine, canvas) {
                 const State = Object.freeze({
                     INACTIVE: 1,
-                    CHARGING: 2,
+                    CHARGING: 2
                 });
                 // This creates a basic Babylon Scene object (non-mesh)
                 const scene = new BABYLON.Scene(engine);
@@ -67,7 +67,7 @@
                         xrInput: xr.input,
                         jointMeshes: {
                             disableDefaultHandMesh: true,
-                            sourceMesh: BABYLON.MeshBuilder.CreateCylinder("jointParent", {diameterTop: 0, height: 1})
+                            sourceMesh: BABYLON.MeshBuilder.CreateCylinder("jointParent", {height: 1, diameterTop: 0}, scene)
                         },
                     });
                     handsFeature.onHandAddedObservable.add((hand) => {
@@ -80,15 +80,29 @@
                 let chargePosition = null;
                 const isHandsCharging = () => {
                     if (hands.length === 2) {
-                        const middleFingerMetacarpal1 = hands[0].trackedMeshes[10];
-                        const middleFingerMetacarpal2 = hands[1].trackedMeshes[10];
+                        const middleFingerMetacarpal1 = hands[0].trackedMeshes.get("middle-finger-metacarpal");
+                        const middleFingerMetacarpal2 = hands[1].trackedMeshes.get("middle-finger-metacarpal");
                         const positionDiff = middleFingerMetacarpal1.position.subtract(middleFingerMetacarpal2.position);
-                        chargePosition = middleFingerMetacarpal1.add(positionDiff.multiplyByFloats(0.5, 0.5, 0.5));
+                        chargePosition = middleFingerMetacarpal1.position.subtract(positionDiff.multiplyByFloats(0.5, 0.5, 0.5));
                         sphere.position = chargePosition;
-                        return positionDiff.length() < 0.2;
+                        let distanceLimit = 0.2;
+                        if (!currentState == State.INACTIVE) {
+                            distanceLimit = 0.3;
+                        }
+                        return positionDiff.length() < 0.3;
                     }
                     return false;
                 };
+
+                const isHandsReleasing = () => {
+                    if (hands.length === 2) {
+                        const middleFingerMetacarpal1 = hands[0].trackedMeshes.get("middle-finger-metacarpal");
+                        const middleFingerMetacarpal2 = hands[1].trackedMeshes.get("middle-finger-metacarpal");
+                        const angle1 = middleFingerMetacarpal1.rotation
+                        //TODO
+                    }
+                    return false;
+                }
                 scene.registerBeforeRender(() => {
                     switch (currentState) {
                         case State.INACTIVE:
@@ -101,7 +115,19 @@
                             if (!isHandsCharging()) {
                                 currentState = State.INACTIVE;
                                 sphere.isVisible = false;
+                                for (const hand of hands) {
+                                    const jointMesh = hand.trackedMeshes.get("middle-finger-metacarpal");
+                                    console.log(hand);
+                                    console.log(jointMesh.position);
+                                    console.log(jointMesh.absolutePosition);
+                                    console.log(jointMesh.rotation);
+                                    console.log(jointMesh.rotationQuaternion);
+                                    console.log(jointMesh.absoluteRotationQuaternion);
+                                }
+                            } else if (isHandsReleasing()) {
+                                //TODO
                             }
+                            break;
                     }
                 });
                 return scene;
