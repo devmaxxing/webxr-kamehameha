@@ -61,6 +61,7 @@
                 const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
                 // Default intensity is 1. Let's dim the light a small amount
                 light.intensity = 0.7;
+
                 const hands = [];
                 BABYLON.WebXRDefaultExperience.CreateAsync(scene).then((xr) => {
                     const handsFeature = xr.baseExperience.featuresManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
@@ -75,59 +76,118 @@
                     });
                 });
 
+                const activeProjectiles = [];
                 let sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.1, segments: 32 }, scene);
                 let currentState = State.INACTIVE;
+                
+                let positionDiff = null;
                 let chargePosition = null;
-                const isHandsCharging = () => {
+                let previousChargePosition = null;
+                let previousVelocity = null;
+                let velocity = null;
+
+                const resetPositionsAndVelocities = () => {
+                    chargePosition = null;
+                    previousChargePosition = null;
+                    previousVelocity = null;
+                    velocity = null;
+                };
+
+                // const palm1 = new BABYLON.TransformNode("palm1");
+                // const palm1Direction = BABYLON.MeshBuilder.CreateCylinder("palm1Direction", {height: 1, diameterTop: 0}, scene);
+                // palm1Direction.rotation.x = Math.PI/2;
+                // palm1Direction.parent = palm1;
+
+                // const palm2 = new BABYLON.TransformNode("palm2");
+                // const palm2Direction = BABYLON.MeshBuilder.CreateCylinder("palm1Direction", {height: 1, diameterTop: 0}, scene);
+                // palm2Direction.rotation.x = Math.PI/2;
+                // palm2Direction.parent = palm2;
+
+                const updatePositions = () => {
                     if (hands.length === 2) {
                         const middleFingerMetacarpal1 = hands[0].trackedMeshes.get("middle-finger-metacarpal");
                         const middleFingerMetacarpal2 = hands[1].trackedMeshes.get("middle-finger-metacarpal");
-                        const positionDiff = middleFingerMetacarpal1.position.subtract(middleFingerMetacarpal2.position);
-                        chargePosition = middleFingerMetacarpal1.position.subtract(positionDiff.multiplyByFloats(0.5, 0.5, 0.5));
-                        sphere.position = chargePosition;
-                        let distanceLimit = 0.2;
-                        if (!currentState == State.INACTIVE) {
-                            distanceLimit = 0.3;
+                        positionDiff = middleFingerMetacarpal1.absolutePosition.subtract(middleFingerMetacarpal2.absolutePosition);
+
+                        if (chargePosition) {
+                            previousChargePosition = chargePosition;
+                            previousVelocity = velocity;
                         }
-                        return positionDiff.length() < 0.3;
+
+                        chargePosition = middleFingerMetacarpal1.absolutePosition.subtract(positionDiff.multiplyByFloats(0.5, 0.5, 0.5));
+
+                        if (previousChargePosition) {
+                            const timeFactor = 1/engine.getDeltaTime();
+                            velocity = chargePosition.subtract(previousChargePosition).multiplyByFloats(timeFactor, timeFactor, timeFactor);
+                        }
+                    }
+                };
+
+                const handAngleThreshold = Math.PI * 0.1;
+                const isHandsFacingEachOther = () => {
+                    if (hands.length === 2) {
+                        const wrist1Position = hands[0].trackedMeshes.get("wrist").absolutePosition;
+                        const v1 = hands[0].trackedMeshes.get("middle-finger-metacarpal").absolutePosition.subtract(wrist1Position);
+                        const v2 = hands[0].trackedMeshes.get("index-finger-metacarpal").absolutePosition.subtract(wrist1Position);
+                        const palmDirection1 = v2.cross(v1).normalize();
+
+                        const wrist2Position = hands[1].trackedMeshes.get("wrist").absolutePosition;
+                        const v3 = hands[1].trackedMeshes.get("middle-finger-metacarpal").absolutePosition.subtract(wrist2Position);
+                        const v4 = hands[1].trackedMeshes.get("index-finger-metacarpal").absolutePosition.subtract(wrist2Position);
+                        const palmDirection2 = v4.cross(v3).normalize();
+
+                        const angle = Math.acos(BABYLON.Vector3.Dot(palmDirection1, palmDirection2));
+                        return angle < handAngleThreshold;
+                    }
+                    return false;
+                };
+
+                const isHandsInChargeDistance = () => {
+                    if (positionDiff) {
+                        let distanceLimit = 0.2;
+                        if (currentState == State.CHARGING) {
+                            distanceLimit = 0.4;
+                        }
+                        return positionDiff.length() < distanceLimit;
                     }
                     return false;
                 };
 
                 const isHandsReleasing = () => {
-                    if (hands.length === 2) {
-                        const middleFingerMetacarpal1 = hands[0].trackedMeshes.get("middle-finger-metacarpal");
-                        const middleFingerMetacarpal2 = hands[1].trackedMeshes.get("middle-finger-metacarpal");
-                        const angle1 = middleFingerMetacarpal1.rotation
-                        //TODO
+                    if (previousVelocity) {
+                        const velocityDelta = previousVelocity.length() - velocity.length();
+                        return velocityDelta > 0.0005 && !isHandsFacingEachOther();
                     }
                     return false;
                 }
+
                 scene.registerBeforeRender(() => {
+                    updatePositions();
                     switch (currentState) {
                         case State.INACTIVE:
-                            if (isHandsCharging()) {
+                            if (isHandsInChargeDistance() && isHandsFacingEachOther()) {
                                 currentState = State.CHARGING;
                                 sphere.isVisible = true;
                             }
                             break;
                         case State.CHARGING:
-                            if (!isHandsCharging()) {
+                            sphere.position = chargePosition;
+                            if (!isHandsInChargeDistance()) {
                                 currentState = State.INACTIVE;
                                 sphere.isVisible = false;
-                                for (const hand of hands) {
-                                    const jointMesh = hand.trackedMeshes.get("middle-finger-metacarpal");
-                                    console.log(hand);
-                                    console.log(jointMesh.position);
-                                    console.log(jointMesh.absolutePosition);
-                                    console.log(jointMesh.rotation);
-                                    console.log(jointMesh.rotationQuaternion);
-                                    console.log(jointMesh.absoluteRotationQuaternion);
-                                }
                             } else if (isHandsReleasing()) {
-                                //TODO
+                                activeProjectiles.push([sphere, previousVelocity.normalizeToNew()]);
+                                sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.1, segments: 32 }, scene);
+                                sphere.isVisible = false;
+                                currentState = State.INACTIVE;
+                                resetPositionsAndVelocities();
                             }
                             break;
+                    }
+
+                    for (const projectile of activeProjectiles) {
+                        const moveAmount = 0.01 * engine.getDeltaTime();
+                        projectile[0].position.addInPlace(projectile[1].multiplyByFloats(moveAmount, moveAmount, moveAmount));
                     }
                 });
                 return scene;
