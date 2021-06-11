@@ -62,12 +62,109 @@
                 // Default intensity is 1. Let's dim the light a small amount
                 light.intensity = 0.7;
 
+                const createCore = (projectileVector) => {
+                    let particleSystem = new BABYLON.ParticleSystem("particles", 1 , scene);
+                    particleSystem.createPointEmitter(new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, 0));
+
+                    particleSystem.addSizeGradient(0, 0.5); //size at start of particle lifetime  
+                    particleSystem.addSizeGradient(10/Number.MAX_SAFE_INTEGER, 3); //size at end of particle lifetime
+                    particleSystem.minEmitPower = 1.1;
+                    particleSystem.maxEmitPower = 1.1;
+                    particleSystem.emitter = projectileVector;
+                    particleSystem.emitRate = 100;
+                    //replace
+                    particleSystem.particleTexture = new BABYLON.Texture("/textures/circle.png", scene);
+                    particleSystem.minLifeTime = Number.MAX_SAFE_INTEGER;
+                    particleSystem.maxLifeTime = Number.MAX_SAFE_INTEGER;
+                    particleSystem.minSize = 0.1;
+                    particleSystem.maxSize = 0.1;
+                    particleSystem.color1 = new BABYLON.Color4(0.2, 0.5, 1.0, 1.0);
+                    particleSystem.color2 = new BABYLON.Color4(0.2, 0.5, 1.0, 1.0);
+
+                    particleSystem.updateFunction = function (particles) {
+                        for (var index = 0; index < particles.length; index++) {
+                            var particle = particles[index];
+                            particle.age += this._scaledUpdateSpeed;
+
+                            if (particle.age >= particle.lifeTime) {
+                            // Recycle
+                            particles.splice(index, 1);
+                            this._stockParticles.push(particle);
+                            index--;
+                            continue;
+                            } else {
+                            particle.colorStep.scaleToRef(this._scaledUpdateSpeed, this._scaledColorStep);
+                            particle.color.addInPlace(this._scaledColorStep);
+
+                            if (particle.color.a < 0) particle.color.a = 0;
+
+                            particle.position.copyFrom(this.emitter);
+
+                            this.gravity.scaleToRef(this._scaledUpdateSpeed, this._scaledGravity);
+                            }
+                        }
+                    };
+
+                    return particleSystem;
+                };
+
+                const createChargeParticleSystem = (emitterVector) => {
+                    let particleSystem = new BABYLON.ParticleSystem("particles", 1000 , scene);
+
+                    // if (BABYLON.GPUParticleSystem.IsSupported) {
+                    //     particleSystem = new BABYLON.GPUParticleSystem("particles", { capacity:100}, scene);
+                    // } else {
+                    //     particleSystem = new BABYLON.ParticleSystem("particles", 100 , scene);
+                    // }
+            
+                    const customEmitter = new BABYLON.CustomParticleEmitter();
+            
+                    customEmitter.particleDestinationGenerator = (index, particle, out) => {
+                        out.copyFrom(emitterVector);
+                    }
+
+                    // const radius = 1;
+                    particleSystem.startPositionFunction = (worldMatrix, positionToUpdate, particle, isLocal) => {
+                        const theta = Math.random() * 2 * Math.PI;
+                        const u = Math.cos(theta);
+                        const x = Math.sqrt(1 - u * u);
+                        const randX = x * u;
+                        const randY = x * Math.sin(theta);
+                        const randZ = u;
+
+                        BABYLON.Vector3.TransformCoordinatesFromFloatsToRef(randX, randY, randZ, worldMatrix, positionToUpdate);
+                    };
+                
+                    particleSystem.addVelocityGradient(0, 1); //applied power at start of particle lifetime
+                    particleSystem.addVelocityGradient(1, 0.5); //applied power at end of particle lifetime
+                    particleSystem.color1 = new BABYLON.Color4(1.0, 1.0, 1.0, 1.0);
+                    particleSystem.color2 = new BABYLON.Color4(0.2, 0.5, 1.0, 1.0);
+                    particleSystem.minEmitPower = 1.1;
+                    particleSystem.maxEmitPower = 1.1;
+                    particleSystem.emitter = emitterVector;
+                    particleSystem.emitRate = 100;
+                    particleSystem.particleEmitterType = customEmitter;
+                    //replace
+                    particleSystem.particleTexture = new BABYLON.Texture("/textures/circle.png", scene);
+                    particleSystem.minLifeTime = 0.2;
+                    particleSystem.maxLifeTime = 0.2;
+                    particleSystem.minSize = 0.01;
+                    particleSystem.maxSize = 0.1;
+                
+                    return particleSystem;
+                }
+
+                const chargeParticleEmitter = new BABYLON.Vector3(0, 0, 0);
+                const chargeParticles = createChargeParticleSystem(chargeParticleEmitter);
+
+                let currentProjectileEmitter = new BABYLON.Vector3(0, 0, 0);
+                let currentProjectile = createCore(currentProjectileEmitter);
+
                 const hands = [];
                 BABYLON.WebXRDefaultExperience.CreateAsync(scene).then((xr) => {
                     const handsFeature = xr.baseExperience.featuresManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
                         xrInput: xr.input,
                         jointMeshes: {
-                            disableDefaultHandMesh: true,
                             sourceMesh: BABYLON.MeshBuilder.CreateCylinder("jointParent", {height: 1, diameterTop: 0}, scene)
                         },
                     });
@@ -77,7 +174,6 @@
                 });
 
                 const activeProjectiles = [];
-                let sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.1, segments: 32 }, scene);
                 let currentState = State.INACTIVE;
                 
                 let positionDiff = null;
@@ -167,27 +263,34 @@
                         case State.INACTIVE:
                             if (isHandsInChargeDistance() && isHandsFacingEachOther()) {
                                 currentState = State.CHARGING;
-                                sphere.isVisible = true;
+                                chargeParticles.start();
+                                currentProjectile.start();
                             }
                             break;
                         case State.CHARGING:
-                            sphere.position = chargePosition;
+                            chargeParticleEmitter.copyFrom(chargePosition);
+                            currentProjectileEmitter.copyFrom(chargePosition);
                             if (!isHandsInChargeDistance()) {
                                 currentState = State.INACTIVE;
-                                sphere.isVisible = false;
+                                chargeParticles.stop();
+                                chargeParticles.reset();
+                                currentProjectile.stop();
+                                currentProjectile.reset();
                             } else if (isHandsReleasing()) {
-                                activeProjectiles.push([sphere, previousVelocity.normalizeToNew()]);
-                                sphere = BABYLON.MeshBuilder.CreateSphere("sphere", { diameter: 0.1, segments: 32 }, scene);
-                                sphere.isVisible = false;
+                                activeProjectiles.push([currentProjectileEmitter, previousVelocity.normalizeToNew()]);
+                                currentProjectileEmitter = new BABYLON.Vector3(0, 0, 0);
+                                currentProjectile = createCore(currentProjectileEmitter);
                                 currentState = State.INACTIVE;
                                 resetPositionsAndVelocities();
+                                chargeParticles.stop();
+                                chargeParticles.reset();
                             }
                             break;
                     }
 
                     for (const projectile of activeProjectiles) {
                         const moveAmount = 0.01 * engine.getDeltaTime();
-                        projectile[0].position.addInPlace(projectile[1].multiplyByFloats(moveAmount, moveAmount, moveAmount));
+                        projectile[0].addInPlace(projectile[1].multiplyByFloats(moveAmount, moveAmount, moveAmount));
                     }
                 });
                 return scene;
