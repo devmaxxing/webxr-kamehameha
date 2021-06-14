@@ -75,7 +75,7 @@
                     particleSystem.emitter = projectileVector;
                     particleSystem.emitRate = 100;
                     //replace
-                    particleSystem.particleTexture = new BABYLON.Texture("/textures/circle.png", scene);
+                    particleSystem.particleTexture = new BABYLON.Texture("/webxr-kamehameha/textures/circle.png", scene);
                     particleSystem.minLifeTime = 3600;
                     particleSystem.maxLifeTime = 3600;
                     particleSystem.color1 = new BABYLON.Color4(0.2, 0.5, 1.0, 1.0);
@@ -155,7 +155,7 @@
                     particleSystem.emitRate = 200;
                     particleSystem.particleEmitterType = customEmitter;
                     //replace
-                    particleSystem.particleTexture = new BABYLON.Texture("/textures/circle2.png", scene);
+                    particleSystem.particleTexture = new BABYLON.Texture("/webxr-kamehameha/textures/circle2.png", scene);
                     particleSystem.minLifeTime = 0.18;
                     particleSystem.maxLifeTime = 0.18;
                     particleSystem.minSize = 0.01;
@@ -171,11 +171,11 @@
                 let currentProjectile = createCore(currentProjectileEmitter);
 
                 const hands = [];
-                const blastSound = new BABYLON.Sound("blast", "/audio/blast.wav", scene, null, {
+                const blastSound = new BABYLON.Sound("blast", "/webxr-kamehameha/audio/blast.wav", scene, null, {
                     loop: false,
                     autoplay: true
                 });
-                const chargingSound = new BABYLON.Sound("charging", "/audio/charging.wav", scene, null, {
+                const chargingSound = new BABYLON.Sound("charging", "/webxr-kamehameha/audio/charging.wav", scene, null, {
                     loop: false,
                     autoplay: false
                 });
